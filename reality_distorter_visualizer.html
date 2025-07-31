@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>RetroVisual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Ctext x='6' y='25' font-family='Orbitron,Arial,sans-serif' font-size='22' font-weight='300' fill='%23ff2222'%3Er%3C/text%3E%3Ctext x='17' y='25' font-family='Orbitron,Arial,sans-serif' font-size='22' font-weight='300' fill='%232288ff'%3Et%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Monoton&display=swap">
+  <link rel="stylesheet" href="distorter.css">
+  <style>
+    body {
+      background: radial-gradient(circle at 30% 70%, #0ff 0%, #111 60%, #f0f 100%);
+      animation: bgmove 10s infinite linear alternate;
+    }
+    @keyframes bgmove {
+      0% { background-position: 0% 100%; }
+      100% { background-position: 100% 0%; }
+    }
+    #controls {
+      box-shadow: 0 0 30px #f0f8, 0 0 10px #0ff8;
+      border: 2px solid #0ff;
+      background: linear-gradient(135deg, #222 60%, #0ff 100%);
+      font-family: 'Monoton', 'Orbitron', sans-serif;
+      font-size: 1.2em;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #fff;
+      transition: background 0.5s;
+    }
+    #controls button, #controls input[type="file"] {
+      background: #f0f;
+      color: #0ff;
+      border: none;
+      padding: 8px 16px;
+      margin: 5px;
+      border-radius: 6px;
+      font-family: 'Orbitron', 'Monoton', sans-serif;
+      font-size: 1em;
+      box-shadow: 0 0 10px #0ff8;
+      cursor: pointer;
+      transition: background 0.3s, color 0.3s;
+    }
+    #controls button:hover, #controls input[type="file"]:hover {
+      background: #0ff;
+      color: #f0f;
+    }
+    #chaosText {
+      font-family: 'Monoton', 'Orbitron', sans-serif;
+      font-size: 2.5em;
+      color: #fff;
+      text-shadow: 0 0 40px #0ff, 0 0 80px #f0f, 0 0 20px #fff;
+      animation: wildtext 1.5s infinite alternate;
+      pointer-events: none;
+      z-index: 20;
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    @keyframes wildtext {
+      0% { letter-spacing: 2px; }
+      100% { letter-spacing: 20px; }
+    }
+    #visualizer {
+      box-shadow: 0 0 80px 20px #0ff8, 0 0 40px 10px #f0f8;
+      border-radius: 30px;
+      border: 4px solid #f0f;
+      filter: blur(2px) brightness(1.2) contrast(1.2) hue-rotate(30deg);
+      transition: filter 0.2s, box-shadow 0.2s, border-radius 0.2s;
+    }
+    #endOverlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      background: rgba(10, 0, 20, 0.85);
+    }
+    #endMsg {
+      font-family: 'Monoton', 'Orbitron', sans-serif;
+      font-size: 2em;
+      color: #fff;
+      text-shadow: 0 0 20px #0ff, 0 0 40px #f0f;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <input type="file" id="audioFile" accept="audio/*">
+    <button id="startBtn">Start Visualizer</button>
+  </div>
+  <canvas id="visualizer"></canvas>
+  <audio id="audio" controls style="display:none"></audio>
+  <div id="endOverlay">
+    <span id="endMsg">404. Music Finished. Add More.</span>
+  </div>
+  <script src="distorter.js"></script>
+  <script>
+    // --- Wild 2D Canvas Glitch + Chaos Text Visualizer ---
+    window.addEventListener('DOMContentLoaded', function() {
+      document.title = 'RetroVisual';
+      const canvas = document.getElementById('visualizer');
+      const ctx = canvas.getContext('2d');
+      let audio = document.getElementById('audio');
+      const fileInput = document.getElementById('audioFile');
+      const startBtn = document.getElementById('startBtn');
+      const endOverlay = document.getElementById('endOverlay');
+      const wildTexts = [
+        'Distorting Reality...','Warping Space!','Bending Time!','Glitch Mode!','Quantum Chaos!','Fractal Vision!','Neon Dreams!','Pixel Storm!','Echoes of Sound!','Cosmic Vibes!','Hyperdrive!','Psychedelic!','Electric Storm!','Gravity Flux!','Dimension Shift!','Infinite Loop!','Paradox Pulse!','Nebula Flow!','Plasma Surge!','Vortex Spin!'
+      ];
+      let audioCtx, analyser, source, freqData, timeData, running = false, chaosTimer = 0, chaosText = '';
+      let width = 900, height = 500;
+      function resize() {
+        width = window.innerWidth * 0.9;
+        height = window.innerHeight * 0.7;
+        canvas.width = width;
+        canvas.height = height;
+      }
+      window.addEventListener('resize', resize);
+      resize();
+      function pickChaosText() {
+        chaosText = wildTexts[Math.floor(Math.random()*wildTexts.length)];
+      }
+      pickChaosText();
+      function setupAudio() {
+        if (audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        freqData = new Uint8Array(analyser.frequencyBinCount);
+        timeData = new Uint8Array(analyser.fftSize);
+        // Only create MediaElementSourceNode if not already created for this audio element
+        if (!audio._mediaSourceNode || audio._mediaSourceNode.context !== audioCtx) {
+          audio._mediaSourceNode = audioCtx.createMediaElementSource(audio);
+        }
+        audio._mediaSourceNode.connect(analyser);
+        analyser.connect(audioCtx.destination);
+      }
+      fileInput.addEventListener('change', function(e) {
+        if (e.target.files[0]) {
+          // Remove and recreate the audio element to allow a new MediaElementSourceNode
+          if (audioCtx) {
+            audioCtx.close();
+            audioCtx = null;
+            analyser = null;
+            freqData = null;
+            timeData = null;
+            source = null;
+          }
+          if (audio && audio.parentNode) {
+            audio.parentNode.removeChild(audio);
+          }
+          audio = document.createElement('audio');
+          audio.id = 'audio';
+          audio.controls = true;
+          audio.style.display = 'none';
+          document.body.appendChild(audio);
+          audio.src = URL.createObjectURL(e.target.files[0]);
+          audio.load();
+          endOverlay.style.display = 'none';
+          // Re-attach ended event
+          audio.addEventListener('ended', function() {
+            running = false;
+            endOverlay.style.display = 'flex';
+          });
+        }
+      });
+      startBtn.addEventListener('click', function() {
+        setupAudio();
+        audio.play();
+        running = true;
+        endOverlay.style.display = 'none';
+        requestAnimationFrame(draw);
+      });
+      // Attach ended event for initial audio element
+      audio.addEventListener('ended', function() {
+        running = false;
+        endOverlay.style.display = 'flex';
+      });
+      function drawGlitchBars(intensity) {
+        const bars = 128;
+        const barW = width / bars;
+        for (let i = 0; i < bars; i++) {
+          const val = freqData[i];
+          const h = (val/255) * height * (0.4 + 0.6*Math.random());
+          const x = i * barW + Math.sin(Date.now()*0.002 + i*0.2)*8*intensity;
+          ctx.save();
+          ctx.globalAlpha = 0.7 + 0.3*Math.random();
+          ctx.shadowColor = `hsl(${(val*2+Date.now()/10)%360},100%,60%)`;
+          ctx.shadowBlur = 30 + 40*Math.random();
+          ctx.fillStyle = `hsl(${(val*2+Date.now()/5)%360},100%,${60+40*Math.random()}%)`;
+          ctx.fillRect(x, height-h, barW*0.9, h);
+          ctx.restore();
+        }
+      }
+      function drawRGBSplit() {
+        // RGB split effect
+        const img = ctx.getImageData(0,0,width,height);
+        for (let c=0; c<3; c++) {
+          const dx = Math.floor(Math.sin(Date.now()*0.003+c*2)*8);
+          const dy = Math.floor(Math.cos(Date.now()*0.002+c*3)*8);
+          ctx.globalCompositeOperation = ['lighter','screen','difference'][c];
+          ctx.putImageData(img, dx, dy);
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      function drawScanlines() {
+        ctx.save();
+        ctx.globalAlpha = 0.12;
+        for (let y=0; y<height; y+=3) {
+          ctx.fillStyle = `rgba(0,0,0,${0.2+0.2*Math.sin(y+Date.now()/30)})`;
+          ctx.fillRect(0, y, width, 1);
+        }
+        ctx.restore();
+      }
+      function drawChaosText(intensity) {
+        ctx.save();
+        ctx.font = `${60+Math.random()*40*intensity}px 'Monoton', 'Orbitron', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.globalAlpha = 0.7 + 0.3*Math.random();
+        ctx.shadowColor = `hsl(${Math.random()*360},100%,80%)`;
+        ctx.shadowBlur = 30 + 40*Math.random();
+        ctx.fillStyle = `hsl(${Math.random()*360},100%,${60+40*Math.random()}%)`;
+        const tx = width/2 + Math.sin(Date.now()*0.004)*width*0.1*intensity;
+        const ty = height/2 + Math.cos(Date.now()*0.003)*height*0.1*intensity;
+        ctx.save();
+        ctx.translate(tx, ty);
+        ctx.rotate((Math.random()-0.5)*0.2*intensity);
+        ctx.scale(1+Math.random()*0.5*intensity,1+Math.random()*0.5*intensity);
+        ctx.fillText(chaosText, 0, 0);
+        ctx.restore();
+        ctx.restore();
+      }
+      function drawVignette() {
+        const grad = ctx.createRadialGradient(width/2, height/2, width*0.2, width/2, height/2, width*0.6);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.7)');
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = grad;
+        ctx.fillRect(0,0,width,height);
+        ctx.restore();
+      }
+      function drawGlitchBackground(intensity) {
+        // Draw wild glitchy background: noise, shifting color bands, and scanline flicker
+        for (let y = 0; y < height; y += 4) {
+          let hue = (Date.now()/10 + y*2 + Math.sin(y+Date.now()/200)*100) % 360;
+          ctx.save();
+          ctx.globalAlpha = 0.12 + 0.18*Math.random()*intensity;
+          ctx.fillStyle = `hsl(${hue}, 100%, ${30+Math.random()*40}%)`;
+          ctx.fillRect(
+            Math.sin(y+Date.now()/80)*30*intensity,
+            y + Math.sin(Date.now()/100+y)*2*intensity,
+            width + 40*Math.random()*intensity,
+            4 + Math.random()*2
+          );
+          ctx.restore();
+        }
+        // Add random noise dots
+        let dots = Math.floor(400 * intensity);
+        for (let i = 0; i < dots; i++) {
+          ctx.save();
+          ctx.globalAlpha = 0.08 + 0.12*Math.random();
+          ctx.fillStyle = `hsl(${Math.random()*360},100%,80%)`;
+          ctx.fillRect(Math.random()*width, Math.random()*height, 1+Math.random()*2, 1+Math.random()*2);
+          ctx.restore();
+        }
+      }
+      function draw() {
+        if (!running) return;
+        analyser.getByteFrequencyData(freqData);
+        analyser.getByteTimeDomainData(timeData);
+        let intensity = freqData.reduce((a,b)=>a+b,0)/(freqData.length*255);
+        ctx.clearRect(0,0,width,height);
+        // Glitchy background
+        drawGlitchBackground(intensity);
+        // Glitch bars
+        drawGlitchBars(intensity);
+        // RGB split
+        if (Math.random()<0.7*intensity) drawRGBSplit();
+        // Scanlines
+        drawScanlines();
+        // Chaos text
+        if (chaosTimer<=0) {
+          pickChaosText();
+          chaosTimer = 20 + Math.random()*30;
+        } else {
+          chaosTimer--;
+        }
+        drawChaosText(intensity);
+        // Vignette
+        drawVignette();
+        requestAnimationFrame(draw);
+      }
+    });
+  </script>
+</body>
+</html>
